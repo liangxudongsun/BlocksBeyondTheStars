@@ -24,6 +24,62 @@ envelope at the WebSocket edge; deterministic seed world-gen; SQLite default per
 
 ---
 
+### 🧩 Issue #2929 — the useful class extractions, three bugs they found — #2929, #2931–#2938, branch refactor/class-extractions-2929 — ✅ done 2026-10-24 (⚠ playtest open)
+
+Decided 2026-10-23: one "do" (IServerHost promotion), four "change" (crafting rules → Client.Core CraftGate, story
+state → Client.Core, one cruise interact rule, a shared ModelKit; prompts stay off UiPanel), three "drop"
+(PlayerController movement components, HudUi widget classes, the FillColumnCells split) — reasons and reopen
+triggers on #2929. Fixes found on the way: #2936, #2937, #2938.
+
+- **The six shared host members join IServerHost (#2931):** `Sessions`, `Rules`, `InSpace`, `BroadcastToWorld`,
+  `WrapDistSq` and `ShipInteriorContains` were declared again in up to four per-system host interfaces (22 copies, each
+  with its own one-line explicit implementation in a facade partial). They now live once in `IServerHost` (9 → 15
+  members) with one implementation each in `GameServer.Systems.cs`; ADR 0019 and DEVELOPER.md say so, behaviour is
+  unchanged. Pinned by the existing system test classes (Container, Vehicle, BioLab, Temperature, Marker, Tutorial,
+  Journal, NpcWork, Observer, …) and `CodeHealthRatchetTests`.
+- **The #2929 decisions are in the docs (#2929):** the drops and the "prompts stay off UiPanel" call lived only on
+  the issue, so the next scout would measure them again. UI_PANELS.md now says why prompts/tool hosts stay off UiPanel
+  and why the 69 scene searches stay; ARCHITECTURE.md notes GameBootstrap, PlayerController movement and HudUi widgets
+  staying partials; WORLD_GENERATION.md keeps FillColumnCells one method (5-7 % cost), each with its reopen trigger.
+  Docs only, no code or test changed.
+- **One cruise interact rule for the E key and its prompt (#2934):** what E does in cruise (wormhole, go over, ask
+  partner, station when closer or equal, body, partner flying) was written twice: in the E handler in
+  `SpaceView.Flight.cs` and in the board prompt in `SpaceView.Hud.cs`. Both now switch over the Client.Core
+  `CruiseInteractRules.Choose` via `SpaceView.CruiseInteractChoice()`, behaviour is unchanged. Pinned by
+  `CruiseInteractRulesTests` (15 rows plus an exhaustive replay of both former copies).
+- **The crafting rules as a tested Client.Core CraftGate (#2932):** why a recipe card is blocked (blueprint,
+  materials, market, factory, station, full inventory) and whether its result fits lived only in the Unity menu, out of
+  reach of the headless tests. They now live in the Client.Core `CraftGate` (`Check` in the same reason order,
+  `ResultFits`, `Owned`, `HasAll`, `MaxCraftable`, `ReachTier`, `DisassembleRecipe`); the menu keeps one-line wrappers
+  and the same `ui.craft.*` keys, behaviour is unchanged. Pinned by `CraftGateTests` (reason order, `ResultFits` parity
+  with `MaterialPool.CanFit`, the worn-gear/lab-variant drift that #2937 fixes).
+- **The story client state as a tested Client.Core class (#2933):** the VEGA story, journal badge, Story Log and VEGA
+  log state and their handlers (pack states, objectives, journal, relay, story snapshot, fragments, ship-AI lines,
+  reveals) lived in `GameBootstrap.Story.cs`, out of reach of the headless tests. They now live in the Client.Core
+  `StoryClientState`; GameBootstrap forwards its 17 public names to it and `WireStory` keeps its order, behaviour is
+  unchanged. Pinned by `StoryClientStateTests` (badge seeding, ShipAiLine kinds, journal merge, reveals, world reset).
+- **One ModelKit for the cloned model and material helpers (#2935):** `Cube`, `StripCollider`, `Unlit`, `Lit`,
+  `LitTex`, `LitPhase` and `LoadTex` were copied verbatim from `SpaceView.Models.cs` into MenuBackground,
+  ShipPreviewRig, StationDecorView and WorldEntities (~180 lines). They now live once in the client `ModelKit` (next
+  to UiKit/FxKit, with the #1514 cached Unlit shader); the hosts import it via `using static`, the near-clones stay.
+  Behaviour is unchanged. Pinned by `RuntimeShaderInclusionTests` (scans ModelKit.cs) and `CodeHealthRatchetTests`.
+- **Rig prompt canvases go with the rig (#2936):** `UiKit.CreateCanvas` makes a scene-root canvas, so leaving a world
+  left 14 canvases from 12 rig scripts behind (launch/vendor/respawn prompts, NPC dialog, bandit demand, disconnect
+  screen, maintenance banner, trade screen, open star chart, Tab-menu dialogs, touch controls, DeathFx flash), some
+  over the main menu with buttons into a destroyed GameBootstrap. Each OnDestroy now destroys its canvas after the
+  existing unsubscribes. Pinned by `RigCanvasCleanupPlayModeTests` (12 cases) and the PR-CI `RigCanvasCleanupGuardTests`.
+- **The craft gate counts worn gear and lab-changed tools like the server (#2937):** the recipe card ignored the worn
+  piece and lab-changed variants and checked room for one craft only, so a worn oxygen_tank_1 left the tank II card
+  grey and a ×N order the server refused looked live. The variant rule now lives once in the Shared
+  `ItemMods.IsChangedVariant` (MaterialPool calls it, server unchanged); `CraftGate` counts backpack + hold + worn
+  gear with it and checks the scaled ×N inputs and outputs. Pinned by `CraftGateTests` (parity with `MaterialPool`).
+- **Space entities free their materials and tiles (#2938):** every drone, UFO, raider, pod, drop or placeholder hull
+  built through ModelKit got its own Materials and 64×64 tiles, and despawning only destroyed the GameObject, so they
+  piled up until the menu sweep (one round of all kinds left 39 Materials). Entity models and a remote pilot's
+  placeholder hull now build in a `ModelKit.BeginOwned/EndOwned` scope; a refcounted `ModelAssetLease` frees them with
+  the last renderer that wore them (flung explosion parts keep their look). Nothing is shared, so the look is unchanged.
+  Pinned by `SpaceEntityAssetsPlayModeTests` and the PR-CI `SpaceEntityAssetGuardTests`.
+
 ### 📬 Player reports 2026-10-21/23 (Lyxette, v2026.10.24) — a sky ray's wings in the roof, land animals on a giant crown — #2943–#2945, branch fix/player-reports-2026-10-23 — ✅ done 2026-10-23 (⚠ playtest open; no generation, save or protocol change)
 
 Ten reports: answers to our questions (the base core stands in the middle, so the 64 relays of #2879 cover the ring),

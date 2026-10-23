@@ -80,7 +80,7 @@ namespace BlocksBeyondTheStars.Client
                     continue;
                 }
 
-                bool can = CanCraft(r, out _);
+                bool can = CanCraft(r, 1, out _);
                 if (_craftableOnly && !can)
                 {
                     continue;
@@ -512,12 +512,6 @@ namespace BlocksBeyondTheStars.Client
                 y += 30f;
             }
 
-            bool can = CanCraft(r, out string reason);
-            if (!can)
-            {
-                y = AddWrappedDetailLine(reason, y, 26f, 18, new Color(1f, 0.6f, 0.4f)) + 4f;
-            }
-
             // Quantity stepper — craft more than one at a time (the server crafts N in a single action).
             if (_craftCountKey != r.Key)
             {
@@ -527,6 +521,13 @@ namespace BlocksBeyondTheStars.Client
 
             int maxCraft = Mathf.Max(1, MaxCraftable(r));
             _craftCount = Mathf.Clamp(_craftCount, 1, maxCraft);
+
+            // The gate checks the whole ×N order, like the server (#2937): a batch that only partly fits is refused.
+            bool can = CanCraft(r, _craftCount, out string reason);
+            if (!can)
+            {
+                y = AddWrappedDetailLine(reason, y, 26f, 18, new Color(1f, 0.6f, 0.4f)) + 4f;
+            }
 
             UiKit.AddButton(_detail, 8, y, 50, 56, "-", () => { _craftCount = Mathf.Max(1, _craftCount - 1); RebuildDetail(); });
             UiKit.AddText(_detail, 62, y, 92, 56, _craftCount.ToString(), 24, UiKit.TextCol, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -544,26 +545,6 @@ namespace BlocksBeyondTheStars.Client
 
         /// <summary>How many of a recipe the player can currently afford, from their owned inputs. Capped at a
         /// full stack — that is also what the server accepts in one craft order.</summary>
-        private int MaxCraftable(RecipeDefinition r)
-        {
-            int cap = BlocksBeyondTheStars.Shared.Definitions.ItemDefinition.DefaultMaxStack;
-            if (FreeCrafting())
-            {
-                return cap; // nothing is consumed — a full stack per order, the same ceiling the server clamps to
-            }
-
-            int m = cap;
-            foreach (var inp in r.Inputs)
-            {
-                if (inp.Count <= 0)
-                {
-                    continue;
-                }
-
-                m = Mathf.Min(m, Owned(inp.Item) / inp.Count);
-            }
-
-            return Mathf.Clamp(m, 0, cap);
-        }
+        private int MaxCraftable(RecipeDefinition r) => CraftGate.MaxCraftable(r, Gate);
     }
 }
